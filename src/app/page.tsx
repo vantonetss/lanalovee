@@ -1537,50 +1537,73 @@ function ClickHearts() {
   )
 }
 
-/* Music toggle — soft ambient pad via Web Audio API (no external file) */
+/* Music toggle — plays our song, loops, half volume */
 function MusicToggle() {
   const [on, setOn] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const fadeRef = useRef<number | null>(null)
 
-  // start playback (soft fade-in), loop the song
-  const start = useCallback(() => {
-    try {
-      if (!audioRef.current) {
-        const a = new Audio('/audio/song.mp3')
-        a.loop = true
-        a.volume = 0
-        audioRef.current = a
-      }
-      const a = audioRef.current
-      a.currentTime = 0
-      // half as loud as the old ambient (which used 0.06) → 0.03
-      a.volume = 0
-      a.play().catch(() => { /* autoplay blocked — ignore */ })
-      // soft fade-in
-      let v = 0
-      const target = 0.03
-      const fade = setInterval(() => {
-        v = Math.min(target, v + target / 30)
-        a.volume = v
-        if (v >= target) clearInterval(fade)
-      }, 50)
-    } catch {
-      // audio not available — fail silently
+  // create the audio element once (lazy, on first use)
+  const getAudio = useCallback(() => {
+    if (!audioRef.current) {
+      const a = new Audio('/audio/song.mp3')
+      a.loop = true
+      a.volume = 0.03
+      a.preload = 'auto'
+      audioRef.current = a
+    }
+    return audioRef.current
+  }, [])
+
+  const clearFade = useCallback(() => {
+    if (fadeRef.current !== null) {
+      clearInterval(fadeRef.current)
+      fadeRef.current = null
     }
   }, [])
 
+  // start playback — returns true if successfully started
+  const start = useCallback(() => {
+    try {
+      const a = getAudio()
+      // only reset to beginning if it was paused
+      if (a.paused) {
+        a.currentTime = 0
+      }
+      a.volume = 0
+      const playPromise = a.play()
+      if (playPromise) {
+        playPromise.then(() => {
+          // success — soft fade-in
+          clearFade()
+          let v = 0
+          const target = 0.03
+          fadeRef.current = window.setInterval(() => {
+            v = Math.min(target, v + target / 20)
+            a.volume = v
+            if (v >= target) clearFade()
+          }, 50)
+        }).catch(() => {
+          // play() rejected — don't set on=true
+        })
+      }
+    } catch {
+      // audio not available
+    }
+  }, [getAudio, clearFade])
+
   const stop = useCallback(() => {
     const a = audioRef.current
-    if (a) {
+    if (a && !a.paused) {
       try {
-        // soft fade-out then pause
-        const startVol = a.volume
+        const startVol = a.volume || 0.03
+        clearFade()
         let v = startVol
-        const fade = setInterval(() => {
-          v = Math.max(0, v - startVol / 15)
+        fadeRef.current = window.setInterval(() => {
+          v = Math.max(0, v - startVol / 10)
           a.volume = v
           if (v <= 0) {
-            clearInterval(fade)
+            clearFade()
             a.pause()
           }
         }, 40)
@@ -1588,7 +1611,7 @@ function MusicToggle() {
         a.pause()
       }
     }
-  }, [])
+  }, [clearFade])
 
   const toggle = useCallback(() => {
     if (on) {
@@ -1600,7 +1623,11 @@ function MusicToggle() {
     }
   }, [on, start, stop])
 
-  useEffect(() => () => { audioRef.current?.pause(); audioRef.current = null }, [])
+  useEffect(() => () => {
+    clearFade()
+    audioRef.current?.pause()
+    audioRef.current = null
+  }, [clearFade])
 
   // Autoplay on first user interaction (browsers block sound before that)
   useEffect(() => {
@@ -1610,16 +1637,15 @@ function MusicToggle() {
       started = true
       start()
       setOn(true)
-      // remove listeners once started
       window.removeEventListener('click', tryStart)
       window.removeEventListener('scroll', tryStart)
       window.removeEventListener('keydown', tryStart)
       window.removeEventListener('touchstart', tryStart)
     }
-    window.addEventListener('click', tryStart, { once: true, passive: true })
-    window.addEventListener('scroll', tryStart, { once: true, passive: true })
-    window.addEventListener('keydown', tryStart, { once: true, passive: true })
-    window.addEventListener('touchstart', tryStart, { once: true, passive: true })
+    window.addEventListener('click', tryStart, { passive: true })
+    window.addEventListener('scroll', tryStart, { passive: true })
+    window.addEventListener('keydown', tryStart, { passive: true })
+    window.addEventListener('touchstart', tryStart, { passive: true })
     return () => {
       window.removeEventListener('click', tryStart)
       window.removeEventListener('scroll', tryStart)
@@ -3849,7 +3875,7 @@ export default function Home() {
               Reasons to love
             </p>
             <h2 className="text-4xl font-extrabold text-rose-600 sm:text-5xl">
-              Eight of about a million
+              Eight of a million
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-rose-900/65">
               (I ran out of pixels before I ran out of reasons.)
@@ -4204,13 +4230,13 @@ export default function Home() {
         </Reveal>
 
         <Reveal delay={120}>
-          <div className="mt-6 flex items-center justify-center gap-2 text-base font-bold text-rose-600">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xl font-bold text-rose-600 sm:text-2xl">
             Made with
             {/* Easter egg: click this heart N times to reveal a secret message */}
             <button
               onClick={handleSecretHeartClick}
               aria-label={`Tap the heart ${SECRET_CLICKS} times for a secret (${secretClicks}/${SECRET_CLICKS})`}
-              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-125 active:scale-95"
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full transition-transform hover:scale-125 active:scale-95"
             >
               {/* rotating ring that appears after first click */}
               {secretClicks > 0 && secretClicks < SECRET_CLICKS && (
@@ -4244,8 +4270,8 @@ export default function Home() {
               </span>
             </button>
             by Vadik
-            <span className="text-rose-400">·</span>
-            <span className="rounded-lg bg-rose-500 px-2 py-0.5 text-sm font-black text-white">ДаДа</span>
+            <span className="text-rose-300">·</span>
+            <span className="rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 px-3 py-1 text-base font-black text-white shadow-md">ДаДа</span>
           </div>
         </Reveal>
 
