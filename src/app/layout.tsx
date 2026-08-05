@@ -21,7 +21,8 @@ export const metadata: Metadata = {
   keywords: ["love", "romantic", "Vadik", "Lana", "memories", "ДаДа"],
   authors: [{ name: "Vadik" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/favicon.png",
+    apple: "/favicon.png",
   },
   openGraph: {
     title: "From Vadik for Lana 💕",
